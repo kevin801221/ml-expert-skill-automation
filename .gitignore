@@ -1,0 +1,13 @@
+# Python & Environments
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data & Credentials
+data/raw/*.zip
+kaggle.json
+.env
+
+# MacOS
+.DS_Store
