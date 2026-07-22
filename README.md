@@ -72,6 +72,10 @@ All agents executing this skill MUST unconditionally obey these rules:
 
 To demonstrate the power of this skill, an AI Agent executed the full workflow autonomously on the classic **Kaggle Titanic Competition** dataset using our `ml-expert` Skill.
 
+<p align="center">
+  <img src="assets/benchmark_visuals.png" alt="ML Expert Benchmark Metrics & Visualization" width="100%"/>
+</p>
+
 ### Benchmark Results (5-Fold Stratified CV, Zero Leakage)
 
 | Model Architecture | Out-of-Fold (OOF) Accuracy | OOF ROC-AUC | Key Techniques |
