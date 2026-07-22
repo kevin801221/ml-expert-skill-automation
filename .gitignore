@@ -11,3 +11,6 @@ kaggle.json
 
 # MacOS
 .DS_Store
+
+# Temporary Model Caches
+catboost_info/
