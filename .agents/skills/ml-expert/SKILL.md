@@ -30,11 +30,8 @@ All AI agents (Antigravity, Claude Code, etc.) executing this skill **MUST** unc
 - **Strict Leakage Prevention**: Feature scaling, missing value imputation, and target encoding MUST be fitted **exclusively within each training fold** during Cross-Validation. Never fit transformers on the full dataset before splitting.
 - **Reproducibility**: Set explicit, deterministic random seeds (`torch.manual_seed`, `numpy.random.seed`, `random.seed`, `torch.cuda.manual_seed_all`) across all operations.
 
-### 5. Code Quality & Error Handling
-- **Modular Design**: Separate concerns into clean modules (`dataset.py`, `model.py`, `trainer.py`, `metrics.py`, `utils.py`).
-- **Type Hints**: All Python functions and classes must include explicit type hints (`typing.Dict`, `typing.Tuple`, `torch.Tensor`, etc.).
-- **Logging vs Print**: Use standard `logging` module with structured formats instead of raw `print()` calls.
-- **No Silent Exceptions**: Explicitly catch specific exceptions; never use `except Exception: pass`.
+### 6. Model Artifact Persistence & Checkpointing
+- **Automatic Checkpointing**: All trained models (PyTorch `.pth` weights, LightGBM/XGBoost `.joblib`, Feature Pipelines, and Stacking Meta-Learners) MUST be automatically saved to a designated `models/` directory upon training completion for instant inference and deployment.
 
 ---
 

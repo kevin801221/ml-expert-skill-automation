@@ -22,7 +22,7 @@ def seed_everything(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def train_pytorch_fold(train_x_cat, train_x_num, train_y, val_x_cat, val_x_num, val_y, cat_dims, emb_dims, num_dim, epochs=120, batch_size=32, lr=1e-3) -> np.ndarray:
+def train_pytorch_fold(train_x_cat, train_x_num, train_y, val_x_cat, val_x_num, val_y, cat_dims, emb_dims, num_dim, epochs=120, batch_size=32, lr=1e-3, fold_idx: int = None) -> np.ndarray:
     # Convert numpy to torch tensors
     train_cat_t = {col: torch.tensor(train_x_cat[col].values, dtype=torch.long) for col in train_x_cat.columns}
     train_num_t = torch.tensor(train_x_num.values, dtype=torch.float32)
@@ -54,8 +54,12 @@ def train_pytorch_fold(train_x_cat, train_x_num, train_y, val_x_cat, val_x_num, 
             optimizer.step()
         scheduler.step()
         
-    # Eval Inference
+    # Eval Inference & Save Checkpoint
     model.eval()
+    os.makedirs('models', exist_ok=True)
+    if fold_idx is not None:
+        torch.save(model.state_dict(), f'models/pytorch_fold_{fold_idx+1}.pth')
+        
     with torch.no_grad():
         val_logits = model(val_cat_t, val_num_t)
         probs = torch.sigmoid(val_logits).numpy()
@@ -123,7 +127,7 @@ def main():
         probs_pt = train_pytorch_fold(
             X_train_cat, X_train_num_scaled, y_train,
             X_val_cat, X_val_num_scaled, y_val,
-            cat_dims, emb_dims, len(num_cols)
+            cat_dims, emb_dims, len(num_cols), fold_idx=fold
         )
         oof_pytorch[val_idx] = probs_pt
         
@@ -183,6 +187,25 @@ def main():
     print("====================================================================================")
     print("\nClassification Report:")
     print(classification_report(target, ensemble_preds))
+
+    # Save Model Artifacts
+    import joblib
+    models_dir = 'models'
+    os.makedirs(models_dir, exist_ok=True)
+    
+    joblib.dump(lgb_model, os.path.join(models_dir, 'lightgbm_model.joblib'))
+    joblib.dump(xgb_model, os.path.join(models_dir, 'xgboost_model.joblib'))
+    joblib.dump(cat_model, os.path.join(models_dir, 'catboost_model.joblib'))
+    joblib.dump(meta_model, os.path.join(models_dir, 'stacking_meta_learner.joblib'))
+    joblib.dump(pipeline, os.path.join(models_dir, 'feature_pipeline.joblib'))
+    
+    print(f"\n✅ All trained model artifacts successfully saved to: {os.path.abspath(models_dir)}/")
+    print(f"  - lightgbm_model.joblib")
+    print(f"  - xgboost_model.joblib")
+    print(f"  - catboost_model.joblib")
+    print(f"  - stacking_meta_learner.joblib")
+    print(f"  - feature_pipeline.joblib")
+    print(f"  - pytorch_fold_*.pth (saved per fold)")
 
 if __name__ == '__main__':
     main()

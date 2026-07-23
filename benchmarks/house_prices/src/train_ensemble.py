@@ -24,7 +24,7 @@ def seed_everything(seed=2026):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def train_pytorch_regressor_fold(train_x_cat, train_x_num, train_y, val_x_cat, val_x_num, val_y, cat_dims, emb_dims, num_dim, epochs=150, batch_size=32, lr=1e-3) -> np.ndarray:
+def train_pytorch_regressor_fold(train_x_cat, train_x_num, train_y, val_x_cat, val_x_num, val_y, cat_dims, emb_dims, num_dim, epochs=150, batch_size=32, lr=1e-3, fold_idx: int = None) -> np.ndarray:
     train_cat_t = {col: torch.tensor(train_x_cat[col].values, dtype=torch.long) for col in train_x_cat.columns}
     train_num_t = torch.tensor(train_x_num.values, dtype=torch.float32)
     train_y_t = torch.tensor(train_y.values, dtype=torch.float32)
@@ -55,6 +55,10 @@ def train_pytorch_regressor_fold(train_x_cat, train_x_num, train_y, val_x_cat, v
         scheduler.step()
         
     model.eval()
+    os.makedirs('benchmarks/house_prices/models', exist_ok=True)
+    if fold_idx is not None:
+        torch.save(model.state_dict(), f'benchmarks/house_prices/models/pytorch_fold_{fold_idx+1}.pth')
+        
     with torch.no_grad():
         val_preds = model(val_cat_t, val_num_t).numpy()
     return val_preds
@@ -122,7 +126,7 @@ def main():
         preds_pt = train_pytorch_regressor_fold(
             X_train_cat, X_train_num_scaled, y_train,
             X_val_cat, X_val_num_scaled, y_val,
-            cat_dims, emb_dims, len(num_cols)
+            cat_dims, emb_dims, len(num_cols), fold_idx=fold
         )
         oof_pt[val_idx] = preds_pt
         
@@ -175,6 +179,19 @@ def main():
              target=target_log_price,
              oof_pt=oof_pt, oof_lgb=oof_lgb, oof_xgb=oof_xgb, oof_cat=oof_cat,
              final_preds=final_log_preds)
+
+    # Save Model Artifacts
+    import joblib
+    models_dir = 'benchmarks/house_prices/models'
+    os.makedirs(models_dir, exist_ok=True)
+    
+    joblib.dump(lgb, os.path.join(models_dir, 'lightgbm_regressor.joblib'))
+    joblib.dump(xgb, os.path.join(models_dir, 'xgboost_regressor.joblib'))
+    joblib.dump(cat, os.path.join(models_dir, 'catboost_regressor.joblib'))
+    joblib.dump(meta, os.path.join(models_dir, 'stacking_ridge_meta.joblib'))
+    joblib.dump(pipeline, os.path.join(models_dir, 'feature_pipeline.joblib'))
+    
+    print(f"\n✅ All trained House Prices models successfully saved to: {os.path.abspath(models_dir)}/")
 
 if __name__ == '__main__':
     main()
