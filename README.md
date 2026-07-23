@@ -49,10 +49,11 @@ flowchart LR
 - Decomposes `ML_SPEC.md` into explicit, vertical, testable tickets (`TASKS.md`).
 - Each ticket is isolated by user features (Data Loader, Features, Model, Eval) rather than technical layers.
 
-### 4. `/ml-build` (uv, PyTorch & TDD Loop)
-- **Code Unlocked**: Executes implementation in Python 3.13+ using `uv`.
-- Follows Red-Green-Refactor TDD loop with `pytest`.
-- Fits pre-processing **strictly within Cross-Validation folds** to guarantee zero data leakage.
+### 🔄 Self-Healing Closed-Loop Pipeline
+If an evaluation metric fails to meet the benchmark target, an OOM occurs, or dimension errors pop up, the AI Agent **autonomously searches docs/papers, refactors feature pipeline code, and re-trains/re-evaluates** until the benchmark threshold is achieved.
+
+### 🧪 Proof-of-Concept & Future Roadmap
+These standard benchmark competitions serve as a **Proof-of-Concept (PoC)** to validate the closed-loop architecture. Now that the pipeline is battle-tested, this Skill engine is designed to scale directly to complex Multi-Modal architectures, RecSys, and LLM Fine-Tuning tasks.
 
 ---
 
