@@ -1,4 +1,5 @@
 # Main Agent Configuration for Kaggle Autonomous Agent Prediction (Beta)
+name: ml_expert_agent
 model: gemini-3.5-flash
 
 description: >
@@ -6,7 +7,15 @@ description: >
   Autonomously performs dataset exploration, feature engineering, PyTorch deep tabular modeling,
   GBDT ensembling, cross-validation, and self-healing predictions for unseen binary classification tasks.
 
-system_instruction: !include prompts/system.md
+instruction: !include prompts/system.md
+
+tools:
+  - run_command
+  - write_file
+  - edit_file
+  - submit_predictions
+  - select_submission
+  - get_status
 
 skills:
-  - !include skills/ml-expert/SKILL.md
+  - skills/ml-expert
