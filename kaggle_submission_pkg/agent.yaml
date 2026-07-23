@@ -1,0 +1,12 @@
+# Main Agent Configuration for Kaggle Autonomous Agent Prediction (Beta)
+model: gemini-3.5-flash
+
+description: >
+  An autonomous expert data science AI agent designed with a 4-step engineering pipeline.
+  Autonomously performs dataset exploration, feature engineering, PyTorch deep tabular modeling,
+  GBDT ensembling, cross-validation, and self-healing predictions for unseen binary classification tasks.
+
+system_instruction: !include prompts/system.md
+
+skills:
+  - !include skills/ml-expert/SKILL.md
