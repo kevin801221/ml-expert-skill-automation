@@ -1,32 +1,35 @@
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 import torch
 import joblib
 import numpy as np
 import pandas as pd
+import lightgbm as lgb
+import xgboost as xgb
+from catboost import CatBoostRegressor
 
 from benchmarks.house_prices.src.models.pytorch_regressor import PyTorchHousingRegressor
 
 def run_house_prices_inference():
-    """
-    Standard Inference Script for House Prices Model.
-    Loads saved model checkpoints from benchmarks/house_prices/models/ and predicts real USD prices.
-    """
     models_dir = 'benchmarks/house_prices/models'
     data_path = 'benchmarks/house_prices/data/raw/Housing.csv'
 
     if not os.path.exists(models_dir):
-        raise FileNotFoundError(f"Missing '{models_dir}' directory! Run train_ensemble.py first.")
+        raise FileNotFoundError(f"Missing '{models_dir}' directory! Run save_models.py first.")
         
-    print("=========================================================================")
-    print("🚀 Running House Prices Regression Inference Pipeline...")
-    print("=========================================================================")
+    print("=========================================================================", flush=True)
+    print("🚀 Running House Prices Regression Inference Pipeline...", flush=True)
+    print("=========================================================================", flush=True)
 
     # 1. Load Feature Pipeline & Data
-    print("\n1️⃣ Loading Housing dataset & feature pipeline...")
+    print("\n1️⃣ Loading Housing dataset & feature pipeline...", flush=True)
     pipeline = joblib.load(os.path.join(models_dir, 'feature_pipeline.joblib'))
     raw_df = pd.read_csv(data_path)
     
-    # Take first 10 rows as sample inference test cases
     test_df = raw_df.head(10).copy()
     transformed_test = pipeline.transform(test_df)
 
@@ -42,7 +45,7 @@ def run_house_prices_inference():
     X_test_gb = pd.concat([X_test_cat, X_test_num_scaled], axis=1)
 
     # 2. PyTorch Model Predictions
-    print("\n2️⃣ Loading PyTorch Regressor checkpoints (.pth)...")
+    print("\n2️⃣ Loading PyTorch Regressor checkpoints (.pth)...", flush=True)
     emb_dims = {
         'mainroad_code': (2, 2), 'guestroom_code': (2, 2), 'basement_code': (2, 2),
         'hotwaterheating_code': (2, 2), 'airconditioning_code': (2, 2), 'prefarea_code': (2, 2),
@@ -64,29 +67,32 @@ def run_house_prices_inference():
             with torch.no_grad():
                 pt_preds += model(cat_t, num_t).numpy()
             fold_count += 1
-            print(f"   Loaded PyTorch checkpoint: {ckpt_path}")
+            print(f"   Loaded PyTorch checkpoint: {ckpt_path}", flush=True)
             
     if fold_count > 0:
         pt_preds /= fold_count
 
-    # 3. GBDT Model Predictions
-    print("\n3️⃣ Loading GBDT Regressor checkpoints (.joblib)...")
-    lgb = joblib.load(os.path.join(models_dir, 'lightgbm_regressor.joblib'))
-    xgb = joblib.load(os.path.join(models_dir, 'xgboost_regressor.joblib'))
-    cat = joblib.load(os.path.join(models_dir, 'catboost_regressor.joblib'))
-
-    lgb_preds = lgb.predict(X_test_gb)
-    xgb_preds = xgb.predict(X_test_gb)
-    cat_preds = cat.predict(X_test_gb)
+    # 3. Native GBDT C++ Model Predictions
+    print("\n3️⃣ Loading Native GBDT Regressor C++ checkpoints...", flush=True)
+    lgb_booster = lgb.Booster(model_file=os.path.join(models_dir, 'lightgbm_regressor.txt'))
+    lgb_preds = lgb_booster.predict(X_test_gb)
+    
+    xgb_booster = xgb.Booster()
+    xgb_booster.load_model(os.path.join(models_dir, 'xgboost_regressor.json'))
+    dtest = xgb.DMatrix(X_test_gb)
+    xgb_preds = xgb_booster.predict(dtest)
+    
+    cat_model = CatBoostRegressor()
+    cat_model.load_model(os.path.join(models_dir, 'catboost_regressor.cbm'))
+    cat_preds = cat_model.predict(X_test_gb)
 
     # 4. Meta Stacking Inference & Inverse Log Transform
-    print("\n4️⃣ Performing Meta-Learner Stacking & Inverse Log1p Transformation...")
+    print("\n4️⃣ Performing Meta-Learner Stacking & Inverse Log1p Transformation...", flush=True)
     meta = joblib.load(os.path.join(models_dir, 'stacking_ridge_meta.joblib'))
-    X_test_meta = np.column_stack([pt_preds, lgb_preds, xgb_preds, cat_preds])
+    X_test_meta = np.column_stack([lgb_preds, xgb_preds, cat_preds])
     
     final_log_preds = meta.predict(X_test_meta)
     
-    # Convert log1p back to actual USD price values
     actual_prices = test_df['price'].values
     predicted_prices = np.expm1(final_log_preds)
 
@@ -99,11 +105,11 @@ def run_house_prices_inference():
         'Error_Pct': [f"{abs(p - a)/a*100:.2f}%" for a, p in zip(actual_prices, predicted_prices)]
     })
 
-    print("\n=========================================================================")
-    print("✨ HOUSE PRICES INFERENCE COMPLETED SUCCESSFULLY!")
-    print("=========================================================================\n")
-    print("Sample Inference Predictions vs Actual Prices:\n")
-    print(results_df.to_string(index=False))
+    print("\n=========================================================================", flush=True)
+    print("✨ HOUSE PRICES INFERENCE COMPLETED SUCCESSFULLY!", flush=True)
+    print("=========================================================================\n", flush=True)
+    print("Sample Inference Predictions vs Actual Prices:\n", flush=True)
+    print(results_df.to_string(index=False), flush=True)
 
 if __name__ == '__main__':
     run_house_prices_inference()

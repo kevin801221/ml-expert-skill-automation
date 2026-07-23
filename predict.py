@@ -1,36 +1,36 @@
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 import torch
 import joblib
 import numpy as np
 import pandas as pd
-from typing import Dict, List
+import lightgbm as lgb
+import xgboost as xgb
+from catboost import CatBoostClassifier
 
 from src.models.pytorch_net import PyTorchTabularNet
 
 def run_titanic_inference():
-    """
-    Standard Inference Script for Titanic Model.
-    Loads saved model checkpoints from models/ and performs ensembled predictions on test data.
-    """
     models_dir = 'models'
     test_path = 'data/raw/test.csv'
     
     if not os.path.exists(models_dir):
-        raise FileNotFoundError(f"Missing '{models_dir}' directory! Run python src/train_ensemble.py first.")
-    if not os.path.exists(test_path):
-        raise FileNotFoundError(f"Missing test dataset at '{test_path}'.")
+        raise FileNotFoundError(f"Missing '{models_dir}' directory! Run python save_models.py first.")
 
-    print("=========================================================================")
-    print("🚀 Running Titanic Benchmark Inference Pipeline...")
-    print("=========================================================================")
+    print("=========================================================================", flush=True)
+    print("🚀 Running Titanic Benchmark Inference Pipeline...", flush=True)
+    print("=========================================================================", flush=True)
 
     # 1. Load Feature Pipeline & Test Data
-    print("\n1️⃣ Loading test data & fitted feature pipeline...")
+    print("\n1️⃣ Loading test data & fitted feature pipeline...", flush=True)
     pipeline = joblib.load(os.path.join(models_dir, 'feature_pipeline.joblib'))
     raw_test_df = pd.read_csv(test_path)
-    print(f"   Loaded raw test dataset shape: {raw_test_df.shape}")
+    print(f"   Loaded raw test dataset shape: {raw_test_df.shape}", flush=True)
 
-    # Transform test set using the learned pipeline parameters
     test_feat = pipeline.transform(raw_test_df)
     
     cat_cols = ['TitleCode', 'DeckCode', 'SexCode', 'EmbarkedCode', 'Pclass']
@@ -39,15 +39,13 @@ def run_titanic_inference():
     X_test_cat = test_feat[cat_cols]
     X_test_num = test_feat[num_cols]
 
-    # Standardize numerical features using train stats stored in pipeline
-    # (Simplified column normalization for inference)
     num_mean = X_test_num.mean()
     num_std = X_test_num.std().replace(0, 1.0)
     X_test_num_scaled = (X_test_num - num_mean) / num_std
     X_test_gb = pd.concat([X_test_cat, X_test_num_scaled], axis=1)
 
     # 2. Load & Predict using PyTorch Fold Models
-    print("\n2️⃣ Loading PyTorch Deep Tabular Net checkpoints (.pth)...")
+    print("\n2️⃣ Loading PyTorch Deep Tabular Net checkpoints (.pth)...", flush=True)
     emb_dims = {'TitleCode': (6, 4), 'DeckCode': (8, 4), 'SexCode': (2, 2), 'EmbarkedCode': (3, 2), 'Pclass': (4, 2)}
     cat_dims = {col: emb_dims[col][0] for col in cat_cols}
     
@@ -66,25 +64,33 @@ def run_titanic_inference():
                 logits = model(cat_t, num_t)
                 pt_preds += torch.sigmoid(logits).numpy()
             fold_count += 1
-            print(f"   Loaded PyTorch checkpoint: {ckpt_path}")
+            print(f"   Loaded PyTorch checkpoint: {ckpt_path}", flush=True)
             
     if fold_count > 0:
         pt_preds /= fold_count
 
-    # 3. Load & Predict using GBDT Models
-    print("\n3️⃣ Loading GBDT model checkpoints (.joblib)...")
-    lgb_model = joblib.load(os.path.join(models_dir, 'lightgbm_model.joblib'))
-    xgb_model = joblib.load(os.path.join(models_dir, 'xgboost_model.joblib'))
-    cat_model = joblib.load(os.path.join(models_dir, 'catboost_model.joblib'))
-
-    lgb_preds = lgb_model.predict_proba(X_test_gb)[:, 1]
-    xgb_preds = xgb_model.predict_proba(X_test_gb)[:, 1]
+    # 3. Load & Predict using C++ Native GBDT Models (.txt, .json, .cbm)
+    print("\n3️⃣ Loading C++ Native GBDT model checkpoints...", flush=True)
+    
+    # LightGBM Native Booster
+    lgb_booster = lgb.Booster(model_file=os.path.join(models_dir, 'lightgbm_model.txt'))
+    lgb_preds = lgb_booster.predict(X_test_gb)
+    
+    # XGBoost Native Booster
+    xgb_booster = xgb.Booster()
+    xgb_booster.load_model(os.path.join(models_dir, 'xgboost_model.json'))
+    dtest = xgb.DMatrix(X_test_gb)
+    xgb_preds = xgb_booster.predict(dtest)
+    
+    # CatBoost Native Model
+    cat_model = CatBoostClassifier()
+    cat_model.load_model(os.path.join(models_dir, 'catboost_model.cbm'))
     cat_preds = cat_model.predict_proba(X_test_gb)[:, 1]
 
-    # 4. Load Meta-Learner & Perform Stacking Ensemble
-    print("\n4️⃣ Performing Meta-Learner Stacking Inference...")
+    # 4. Meta-Learner Stacking Ensemble
+    print("\n4️⃣ Performing Meta-Learner Stacking Inference...", flush=True)
     meta_model = joblib.load(os.path.join(models_dir, 'stacking_meta_learner.joblib'))
-    X_test_meta = np.column_stack([pt_preds, lgb_preds, xgb_preds, cat_preds])
+    X_test_meta = np.column_stack([lgb_preds, xgb_preds, cat_preds])
     
     ensemble_probs = meta_model.predict_proba(X_test_meta)[:, 1]
     final_preds = (ensemble_probs >= 0.50).astype(int)
@@ -95,7 +101,6 @@ def run_titanic_inference():
         'Name': raw_test_df['Name'],
         'Sex': raw_test_df['Sex'],
         'Age': raw_test_df['Age'],
-        'PyTorch_Prob': np.round(pt_preds, 4),
         'LightGBM_Prob': np.round(lgb_preds, 4),
         'XGBoost_Prob': np.round(xgb_preds, 4),
         'CatBoost_Prob': np.round(cat_preds, 4),
@@ -115,11 +120,6 @@ def run_titanic_inference():
     print("=========================================================================\n", flush=True)
     print("Sample Inference Output (First 10 Passengers):\n", flush=True)
     print(results_df.head(10).to_string(index=False), flush=True)
-    
-    out_file = '/Users/kevinluo/ml-expert-skill-make/data/sample_inference_results.txt'
-    with open(out_file, 'w') as f:
-        f.write(results_df.head(10).to_string(index=False))
-    print(f"\nWrote inference sample to: {out_file}", flush=True)
 
 if __name__ == '__main__':
     run_titanic_inference()
