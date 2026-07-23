@@ -190,7 +190,7 @@ def main():
 
     # Save Model Artifacts
     import joblib
-    models_dir = 'models'
+    models_dir = '/Users/kevinluo/ml-expert-skill-make/models'
     os.makedirs(models_dir, exist_ok=True)
     
     joblib.dump(lgb_model, os.path.join(models_dir, 'lightgbm_model.joblib'))
@@ -199,13 +199,7 @@ def main():
     joblib.dump(meta_model, os.path.join(models_dir, 'stacking_meta_learner.joblib'))
     joblib.dump(pipeline, os.path.join(models_dir, 'feature_pipeline.joblib'))
     
-    print(f"\n✅ All trained model artifacts successfully saved to: {os.path.abspath(models_dir)}/")
-    print(f"  - lightgbm_model.joblib")
-    print(f"  - xgboost_model.joblib")
-    print(f"  - catboost_model.joblib")
-    print(f"  - stacking_meta_learner.joblib")
-    print(f"  - feature_pipeline.joblib")
-    print(f"  - pytorch_fold_*.pth (saved per fold)")
+    print(f"\n✅ All trained model artifacts successfully saved to: {models_dir}/")
 
 if __name__ == '__main__':
     main()

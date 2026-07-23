@@ -15,7 +15,7 @@ All AI agents (Antigravity, Claude Code, etc.) executing this skill **MUST** unc
 
 ### 1. Environment & Dependency Management
 - **Python Version**: Must use **Python 3.13+** (or 3.14).
-- **Package Manager**: **MANDATORY `uv`**. All virtual environment setups (`uv venv`) and dependency installations (`uv pip install` / `uv add`) MUST use `uv`. Traditional `pip` or `poetry` are strictly forbidden unless compatibility issues arise.
+- **Package Manager**: **MANDATORY `uv`**. All virtual environment setups (`uv venv`), dependency installations (`uv pip install` / `uv add`), and script executions (`uv run python <script.py>` / `uv run pytest`) MUST use `uv`. Traditional `pip`, `poetry`, or manual `source` activations are replaced by modern `uv run`.
 - **Dependency Tracking**: All project dependencies must be cleanly recorded in `pyproject.toml` or `requirements.txt`.
 
 ### 2. Kaggle API & Dataset Integration

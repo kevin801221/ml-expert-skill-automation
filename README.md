@@ -153,7 +153,7 @@ The AI will guide you step-by-step through:
 1. `/ml-grill` — Zero-code concept & architecture interview
 2. `/ml-spec` — Generating [ML_SPEC.md](ML_SPEC.md)
 3. `/ml-tickets` — Generating [TASKS.md](TASKS.md)
-4. `/ml-build` — Environment setup (`uv`), PyTorch model training, TDD pytest, and Stacking Ensemble evaluation!
+4. `/ml-build` — Environment setup (`uv`), PyTorch model training (`uv run python src/train_ensemble.py`), TDD (`uv run pytest`), and instant inference (`uv run python predict.py`)!
 
 ---
 
