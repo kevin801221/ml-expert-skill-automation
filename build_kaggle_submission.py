@@ -6,6 +6,7 @@ into it (the old version re-injected Titanic-specific files on every build).
 import os
 import re
 import sys
+import shutil
 import zipfile
 
 from rich import box
@@ -58,23 +59,27 @@ def build():
             console.print(f'[bold red]FAIL[/bold red] {e}')
         sys.exit(1)
 
-    zip_path = os.path.join(ROOT, 'submission.zip')
-    if os.path.exists(zip_path):
-        os.remove(zip_path)
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    zip_name = 'ml_expert_agent_v7.zip'
+    zip_output_path = os.path.join(ROOT, zip_name)
+    if os.path.exists(zip_output_path):
+        os.remove(zip_output_path)
+    with zipfile.ZipFile(zip_output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for dirpath, _, files in os.walk(PKG):
             for name in files:
                 path = os.path.join(dirpath, name)
                 zipf.write(path, os.path.relpath(path, PKG))
 
+    # Also keep a copy as submission.zip for backward compatibility
+    shutil.copy(zip_output_path, os.path.join(ROOT, 'submission.zip'))
+
     table = Table(title='submission.zip contents', box=box.ROUNDED)
     table.add_column('Archive Path', style='bold cyan')
     table.add_column('Size (Bytes)', style='bold green')
-    with zipfile.ZipFile(zip_path) as zipf:
+    with zipfile.ZipFile(zip_output_path) as zipf:
         for info in zipf.infolist():
             table.add_row(info.filename, f'{info.file_size:,}')
     console.print(table)
-    console.print(Panel(f'[bold green]SUCCESS: {zip_path} ({os.path.getsize(zip_path) / 1024:.1f} KB)[/bold green]', border_style='green'))
+    console.print(Panel(f'[bold green]SUCCESS: {zip_output_path} ({os.path.getsize(zip_output_path) / 1024:.1f} KB)[/bold green]', border_style='green'))
 
 
 if __name__ == '__main__':
