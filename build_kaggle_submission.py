@@ -1,72 +1,81 @@
+"""Validate and zip kaggle_submission_pkg/ into submission.zip.
+
+The package directory is the single source of truth - this script copies nothing
+into it (the old version re-injected Titanic-specific files on every build).
+"""
 import os
-import shutil
+import re
+import sys
 import zipfile
+
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
 
 console = Console()
 
-def build_submission():
-    console.print(Panel("[bold cyan]📦 KAGGLE AUTONOMOUS AGENT SUBMISSION BUILDER[/bold cyan]\n[dim]Compiling Google ADK submission.zip for Autonomous Agent Prediction (Beta)[/dim]", box=box.DOUBLE, border_style="cyan"))
+ROOT = os.path.dirname(os.path.abspath(__file__))
+PKG = os.path.join(ROOT, 'kaggle_submission_pkg')
+REQUIRED = [
+    'agent.yaml',
+    'prompts/system.md',
+    'skills/ml-expert/SKILL.md',
+    'skills/ml-expert/scripts/run_pipeline.py',
+]
+# ADK injects instruction text as a template: a bare {identifier} raises
+# "Context variable not found" and kills the session at startup.
+BRACE_RE = re.compile(r'\{[A-Za-z_][A-Za-z0-9_]*\}')
 
-    root_dir = '/Users/kevinluo/ml-expert-skill-make'
-    pkg_dir = os.path.join(root_dir, 'kaggle_submission_pkg')
-    skill_dst_dir = os.path.join(pkg_dir, 'skills', 'ml-expert')
-    
-    # 1. Prepare Directory Structure
-    os.makedirs(os.path.join(skill_dst_dir, 'scripts'), exist_ok=True)
-    os.makedirs(os.path.join(skill_dst_dir, 'resources'), exist_ok=True)
 
-    # 2. Copy SKILL.md and assets into package
-    skill_src_file = os.path.join(root_dir, '.agents', 'skills', 'ml-expert', 'SKILL.md')
-    if os.path.exists(skill_src_file):
-        shutil.copy(skill_src_file, os.path.join(skill_dst_dir, 'SKILL.md'))
+def validate():
+    errors = []
+    for rel in REQUIRED:
+        if not os.path.exists(os.path.join(PKG, rel)):
+            errors.append(f'missing required file: {rel}')
+    for dirpath, _, files in os.walk(PKG):
+        for name in files:
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, PKG)
+            try:
+                text = open(path, encoding='utf-8').read()
+            except UnicodeDecodeError:
+                errors.append(f'binary file not allowed in package: {rel}')
+                continue
+            if rel.endswith(('.md', '.yaml', '.yml')):
+                hits = BRACE_RE.findall(text)
+                if hits:
+                    errors.append(f'bare-brace template pattern in {rel}: {sorted(set(hits))}')
+    return errors
 
-    # Copy helper scripts
-    src_files = [
-        ('src/features.py', 'scripts/features.py'),
-        ('src/models/pytorch_net.py', 'scripts/pytorch_net.py'),
-        ('src/train_ensemble.py', 'scripts/train_ensemble.py')
-    ]
-    for src, dst in src_files:
-        s_path = os.path.join(root_dir, src)
-        d_path = os.path.join(skill_dst_dir, dst)
-        if os.path.exists(s_path):
-            os.makedirs(os.path.dirname(d_path), exist_ok=True)
-            shutil.copy(s_path, d_path)
 
-    # Copy domain knowledge resources
-    spec_src = os.path.join(root_dir, 'ML_SPEC.md')
-    if os.path.exists(spec_src):
-        shutil.copy(spec_src, os.path.join(skill_dst_dir, 'resources', 'domain_knowledge.md'))
+def build():
+    console.print(Panel('[bold cyan]KAGGLE AUTONOMOUS AGENT SUBMISSION BUILDER[/bold cyan]', box=box.DOUBLE, border_style='cyan'))
 
-    # 3. Create submission.zip Archive
-    zip_output_path = os.path.join(root_dir, 'submission.zip')
-    if os.path.exists(zip_output_path):
-        os.remove(zip_output_path)
+    errors = validate()
+    if errors:
+        for e in errors:
+            console.print(f'[bold red]FAIL[/bold red] {e}')
+        sys.exit(1)
 
-    with zipfile.ZipFile(zip_output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(pkg_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, pkg_dir)
-                zipf.write(file_path, arcname)
+    zip_path = os.path.join(ROOT, 'submission.zip')
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for dirpath, _, files in os.walk(PKG):
+            for name in files:
+                path = os.path.join(dirpath, name)
+                zipf.write(path, os.path.relpath(path, PKG))
 
-    # 4. Display Archive Contents Table
-    archive_table = Table(title="📁 Built submission.zip Archive Structure", box=box.ROUNDED)
-    archive_table.add_column("Archive File Path", style="bold cyan")
-    archive_table.add_column("Size (Bytes)", style="bold green")
-
-    with zipfile.ZipFile(zip_output_path, 'r') as zipf:
+    table = Table(title='submission.zip contents', box=box.ROUNDED)
+    table.add_column('Archive Path', style='bold cyan')
+    table.add_column('Size (Bytes)', style='bold green')
+    with zipfile.ZipFile(zip_path) as zipf:
         for info in zipf.infolist():
-            archive_table.add_row(info.filename, f"{info.file_size:,}")
+            table.add_row(info.filename, f'{info.file_size:,}')
+    console.print(table)
+    console.print(Panel(f'[bold green]SUCCESS: {zip_path} ({os.path.getsize(zip_path) / 1024:.1f} KB)[/bold green]', border_style='green'))
 
-    console.print(archive_table)
-    
-    zip_size_kb = os.path.getsize(zip_output_path) / 1024
-    console.print(Panel(f"[bold green]✨ SUCCESS: Built {zip_output_path} ({zip_size_kb:.2f} KB)[/bold green]\n[dim]Ready for direct submission to Kaggle Autonomous Agent Prediction (Beta)![/dim]", border_style="green"))
 
 if __name__ == '__main__':
-    build_submission()
+    build()

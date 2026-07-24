@@ -2,10 +2,6 @@
 name: ml_expert_agent
 model: gemini-3.1-flash-lite
 
-generation_config:
-  max_output_tokens: 2048
-  temperature: 0.2
-
 description: >
   An autonomous expert data science AI agent designed with a 4-step engineering pipeline.
   Autonomously performs dataset exploration, feature engineering, PyTorch deep tabular modeling,
